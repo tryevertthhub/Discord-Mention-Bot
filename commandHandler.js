@@ -3,7 +3,10 @@ const { fetchAIResponse } = require('./openRouterService');
 const config = require('./config.json');
 const OpenRouter = require('./Router/openrouter');
 
-// Function to send "Ask the AI" button
+/**
+ * Sends an initial button to the user to trigger the AI prompt modal.
+ * @param {Object} interaction - Discord interaction object.
+ */
 async function sendAskModal(interaction) {
     const row = new ActionRowBuilder()
         .addComponents(
@@ -15,7 +18,10 @@ async function sendAskModal(interaction) {
     await interaction.reply({ content: 'Click the button to ask the AI:', components: [row], ephemeral: true });
 }
 
-// Function to show modal
+/**
+ * Presents a modal to the user to input their question for the AI.
+ * @param {Object} interaction - Discord interaction object.
+ */
 async function showAskModal(interaction) {
     const modal = new ModalBuilder()
         .setCustomId('aiModal')
@@ -32,38 +38,40 @@ async function showAskModal(interaction) {
     await interaction.showModal(modal);
 }
 
-// Main interaction handler
+/**
+ * Main function to handle various interactions.
+ * @param {Object} interaction - Discord interaction object.
+ * @param {Object} client - Discord client instance.
+ */
 async function handleInteraction(interaction, client) {
     if (interaction.isCommand() && interaction.commandName === 'ask') {
         await sendAskModal(interaction);
     }
-
     if (interaction.isButton() && interaction.customId === 'openModal') {
         await showAskModal(interaction);
     }
-
     if (interaction.type === InteractionType.ModalSubmit && interaction.customId === 'aiModal') {
         await processAskModal(interaction);
     }
-
     if (interaction.isButton() && interaction.customId === 'deleteMessage') {
         await deleteMessage(interaction);
     }
-
     if (interaction.isButton() && interaction.customId.startsWith('relatedQuestion')) {
         await handleRelatedQuestion(interaction);
     }
 }
 
+/**
+ * Processes the user’s question from the modal and sends an AI response.
+ * @param {Object} interaction - Discord interaction object.
+ */
 async function processAskModal(interaction) {
-    await interaction.deferReply({ ephemeral: true }); // Only visible to the requesting user
+    await interaction.deferReply({ ephemeral: true });
     const userMessage = interaction.fields.getTextInputValue('messageInput');
     const router = new OpenRouter(config.OPEN_ROUTER_API_KEY);
 
-    // Fetch the AI's response
     const response = await router.generate(userMessage);
 
-    // Create "Delete" button
     const deleteButton = new ButtonBuilder()
         .setCustomId('deleteMessage')
         .setLabel('Delete')
@@ -71,19 +79,14 @@ async function processAskModal(interaction) {
 
     const actionRows = [new ActionRowBuilder().addComponents(deleteButton)];
 
-    // Check if the response is too long and needs to be chunked
     if (response.length > 2000) {
-        const responseChunks = response.match(/.{1,2000}/g); // Split into 2000-character chunks
-
+        const responseChunks = response.match(/.{1,2000}/g);
         try {
-            // Send the first chunk with the delete button
             await interaction.editReply({
                 content: responseChunks[0],
                 components: actionRows,
                 ephemeral: true,
             });
-
-            // Send the remaining chunks as follow-up messages without buttons
             for (let i = 1; i < responseChunks.length; i++) {
                 await interaction.followUp({ content: responseChunks[i], ephemeral: true });
             }
@@ -91,10 +94,9 @@ async function processAskModal(interaction) {
             console.error('Failed to send the response chunks:', error);
         }
     } else {
-        // If response is within 2000 characters, send it as a single message
         try {
             await interaction.editReply({
-                content: `Response from OpenRouter: ${response}`, 
+                content: `Response from OpenRouter: ${response}`,
                 components: actionRows,
                 ephemeral: true,
             });
@@ -104,11 +106,13 @@ async function processAskModal(interaction) {
     }
 }
 
-
-
+/**
+ * Fetches the response for a related question and sends it to the user.
+ * @param {Object} interaction - Discord interaction object.
+ */
 async function handleRelatedQuestion(interaction) {
     try {
-        await interaction.deferUpdate(); 
+        await interaction.deferUpdate();
         const selectedQuestion = interaction.component.label;
         const relatedAnswer = await fetchAIResponse(selectedQuestion);
 
@@ -126,10 +130,13 @@ async function handleRelatedQuestion(interaction) {
     }
 }
 
+/**
+ * Deletes a message at the user's request.
+ * @param {Object} interaction - Discord interaction object.
+ */
 async function deleteMessage(interaction) {
     await interaction.message.delete();
     await interaction.reply({ content: 'Message deleted!', ephemeral: true });
 }
-
 
 module.exports = { handleInteraction };
